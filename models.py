@@ -49,6 +49,11 @@ class uGMModel:
 
         self.lossvalue = None
 
+        self.grad = {}
+        self.grad['mus'] = None
+        self.grad['covs_inv'] = None
+        self.grad['pi'] = None
+        self.grad['move'] = None
 
     def predict(self):
 
@@ -74,6 +79,8 @@ class uGMModel:
         z = a * self.q + b
         self.g = sigmoid(z)
 
+        return self.g
+
     def GenerateFrame(self, f):
 
         mus_p = self.params['mus'] \
@@ -97,7 +104,10 @@ class uGMModel:
         
 
     def loss(self, f): # f : data value (not frame)
-        self.predict()
+        if not f.shape[0] == len(self.frame):
+            f.reshape((1, f.shape[0], f.shape[1]))
+        
+        _ =  self.predict()
 
         a, b = self.logistic_coefficient
         z = a * self.q + b
@@ -106,8 +116,13 @@ class uGMModel:
         # shape(frame, y, x)
         self.lossvalue = U_q - f * self.q
 
+        return self.lossvalue
+
     def gradient_move(self, f):
-        self.loss(f = f)
+        if not f.shape[0] == len(self.frame):
+            f.reshape((1, f.shape[0], f.shape[1]))
+        
+        _ = self.loss(f = f)
 
         mus_plus = np.array([self.params['mus'] \
                              + self.params['move'] * (frm - self.std_frame) \
@@ -124,6 +139,66 @@ class uGMModel:
                                for y in self.ygrid]
                               for frm in self.frame])
         return grad_move
+
+    def gradient(self, f):
+        if not f.shape[0] == len(self.frame):
+            f.reshape((1, f.shape[0], f.shape[1]))
+        
+        _ = self.loss(f = f)
+
+        a, b = self.logistic_coefficient
+
+        diff_gf = self.g - f
+        mus_plus = np.array([self.params['mus'] \
+                             + self.params['move'] * (frm - self.std_frame)\
+                             for frm in self.frame])
+        
+
+        # gradient initialization
+        self.grad['pi'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                            len(self.xgrid), self.mix),
+                                   dtype = float)
+        self.grad['mus'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                             len(self.xgrid), self.mix, 2),
+                                    dtype = float)
+        self.grad['covs_inv'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                                  len(self.xgrid), self.mix, 2, 2),
+                                         dtype = float)
+        self.grad['move'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                              len(self.xgrid), self.mix, 2),
+                                     dtype = float)
+
+        # computing
+        for frm in self.frame:
+            for y in self.ygrid:
+                for x in self.xgrid:
+
+                    self.grad['pi'][frm, y, x, :] = \
+                                diff_gf[frm, y, x] * self.q_each[frm, y, x, :]
+
+                    self.grad['mus'][frm, y, x, :, :] = \
+                                diff_gf[frm, y, x] \
+                                * (self.params['pi'] \
+                                   * self.q_each[frm, y, x, :]).reshape(self.mix, 1)\
+                                * np.linalg.solve(self.params['covs'],
+                                                  (np.array([x, y]) - mus_plus[frm]))
+
+                    tmp = np.array([np.dot(x_mu.reshape(2,1), x_mu.reshape(1,2))
+                                    for x_mu in (np.array([x, y]) - mus_plus[frm])])
+                    self.grad['covs_inv'][frm, y, x, :, :, :] = \
+                                diff_gf[frm, y, x] * (-1/2)\
+                                * (self.params['pi']\
+                                   * self.q_each[frm, y, x, :]).reshape(self.mix, 1, 1)\
+                                * tmp
+
+                    self.grad['move'][frm, y, x, :, :] = \
+                                diff_gf[frm, y, x] * (frm - self.std_frame)\
+                                * (self.params['pi']\
+                                   * self.q_each[frm, y, x, :]).reshape(self.mix, 1)\
+                                * np.linalg.solve(self.params['covs'],
+                                                  (np.array([x, y]) - mus_plus[frm]))
+
+        return self.grad
 
     def modelplot(self, update = False):
         if(update == True):
@@ -188,7 +263,7 @@ class uEpaMixModel(object):
 
         self.grad = {}
         self.grad['mus'] = None
-        self.grad['covs'] = None
+        self.grad['covs_inv'] = None
         self.grad['pi'] = None
         self.grad['move'] = None
 
@@ -235,13 +310,14 @@ class uEpaMixModel(object):
         z = a * self.q + b
         U_q = 1/a * np.log(1 + np.exp(z))
 
-        self.lossvalue = U_q - f * q
+        self.lossvalue = U_q - f * self.q
 
         return np.sum(self.lossvalue)
         
     def gradient(self, f):
 
         # if f is single frame, covert same shape
+        # -> shape(frame, y, x)
         if not f.shape[0] == len(self.frame):
             f.reshape((1, f.shape[0], f.shape[1]))
 
@@ -249,16 +325,76 @@ class uEpaMixModel(object):
         
         a, b = self.logistic_coefficient
 
-        for key in self.grad.keys:
-            self.grad[key] = np.zeros_like(self.q_each, dtype = float)
-            
+        diff_gf = self.g - f
+        mus_plus = np.array([self.params['mus'] \
+                             + self.params['move'] * (frm - self.std_frame) \
+                             for frm in self.frame])
+
+        # gradient initialize
+        self.grad['pi'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                            len(self.xgrid), self.mix),
+                                   dtype = float)
+        self.grad['mus'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                             len(self.xgrid), self.mix, 2),
+                                    dtype = float)
+        self.grad['covs_inv'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                                  len(self.xgrid), self.mix, 2, 2),
+                                         dtype = float)
+        self.grad['move'] = np.zeros(shape = (len(self.frame), len(self.ygrid),
+                                              len(self.xgrid), self.mix, 2),
+                                     dtype = float)
+        
+        # gradient computing
         for frm in self.frame:
             for y in self.ygrid:
                 for x in self.xgrid:
-                    
-                    
-        
 
+                    mask = self.q_each[frm, y, x, :]>0
+                    
+                    self.grad['pi'][frm, y, x, :] = \
+                                diff_gf[frm, y, x] * self.q_each[frm, y, x,:]
+                    
+                    self.grad['mus'][frm, y, x, :, :] = \
+                                diff_gf[frm, y, x] * 2\
+                                * (mask * self.params['pi']).reshape(self.mix, 1)\
+                                * np.linalg.solve(self.params['covs'],
+                                                  (np.array([x, y]) - mus_plus[frm]))
+
+                    tmp = np.array([np.dot(x_mu.reshape(2,1), x_mu.reshape(1,2))
+                                    for x_mu in (np.array([x, y]) - mus_plus[frm])])
+                    self.grad['covs_inv'][frm, y, x, :, :, :] = \
+                                diff_gf[frm, y, x] * (-1)\
+                                * (mask * self.params['pi']).reshape(self.mix, 1, 1)\
+                                * tmp
+
+                    self.grad['move'][frm, y, x, :, :] = \
+                                diff_gf[frm, y, x] * 2 * (frm - self.std_frame)\
+                                * (mask * self.params['pi']).reshape(self.mix, 1)\
+                                * np.linalg.solve(self.params['covs'],
+                                                  (np.array([x, y]) - mus_plus[frm]))
+
+        return self.grad
+
+    def GenerateFrame(self, f):
+
+        mus_p = self.params['mus'] \
+                + self.params['move'] * (f - self.std_frame)
+
+        Epas = Norm2Dmix(mus = mus_p,
+                         covs = self.params['covs'],
+                         pi = self.params['pi'])
+
+        q = np.array([[Norm.pdf(x = np.array([x, y]))
+                       for x in self.xgrid]
+                      for y in self.ygrid])
+
+        a, b = self.logistic_coefficient
+        z = a * q + b
+        g = sigmoid(z)
+
+        # pdb.set_trace()
+
+        return g
         
         
     def ModelPlot(self, frame = range(5), axtype='contourf'):
