@@ -9,7 +9,7 @@ import seaborn as sns
 import pickle
 import pdb
 
-from sklearn.mixture improt GMM
+from sklearn.mixture import GMM
 from tqdm import tqdm
 from multiprocessing import Pool
 
@@ -47,7 +47,7 @@ def analyze(frame, LearningRate, iterate, mixture):
                         iterate = iterate,
                         mixture = mixture)
     analyzer.fit()
-
+    
     return analyzer
 
 
@@ -55,12 +55,12 @@ class Analyzer:
 
     def __init__(self,
                  frame,
-                 OuterDrop = 5
-                 LearningRate = 1.
+                 OuterDrop = 5,
+                 LearningRate = 0.1,
                  iterate = 200,
                  mixture = 10):
 
-        self.f = frame
+        self.f_origin = frame
 
         self.OuterDrop = OuterDrop
 
@@ -70,8 +70,8 @@ class Analyzer:
         self.x_len = frame.shape[1] - 2*self.OuterDrop
         self.xgrid = np.arange(self.x_len)
 
-        self.f_center = frame[self.OuterDrop:self.OuterDrop + self.y_len,
-                              self.OuterDrop:self.OuterDrop + self.x_len]
+        self.f = frame[self.OuterDrop:self.OuterDrop + self.y_len,
+                       self.OuterDrop:self.OuterDrop + self.x_len]
 
         self.lr = LearningRate
 
@@ -93,7 +93,7 @@ class Analyzer:
 
     def fit(self):
 
-        self.modelinit = initializer(frame = self.f)
+        self.modelinit = initializer(frame = self.f_origin)
         
         std_params = self.modelinit.NormApprox(n_comp = self.mix)
         self.a = self.modelinit.a
@@ -123,17 +123,22 @@ class Analyzer:
         self.model_E.params['pi'] = std_params['pi']
 
         for i in tqdm(range(self.it)):
-             grad = self.model_E.gradient(f = self.f)
-             [grad[key] = np.mean(np.sum(grad, axis = (1,2)), axis = 0)
-              for key in grad.keys()]
+            grad = self.model_E.gradient(f = self.f)
+            for key in grad.keys():
+                grad[key] = np.mean(np.sum(grad[key], axis = (1,2)), axis = 0)
 
-             self.model_E.params['pi'] -= self.lr * grad['pi']
-             self.model_E.params['mus'] -= self.lr * grad['mus']
-             self.model_E.params['covs'] -= self.lr * np.linalg.inv(grad['covs'])
+            grad['covs_inv'] += np.identity(2)
 
-             self.hist_E.append(np.mean(self.model_E.lossvalue))
+                
+            self.model_E.params['pi'] -= self.lr * grad['pi']
+            self.model_E.params['mus'] -= self.lr * grad['mus']
+            self.model_E.params['covs'] -= self.lr * np.linalg.inv(grad['covs_inv'])
 
-
+            self.model_E.params['pi'][self.model_E.params['pi']<0] = 1e-3/self.mix
+            self.model_E.params['pi'] = self.model_E.params['pi']\
+                                        /np.sum(self.model_E.params['pi'])
+            
+            self.hist_E.append(np.mean(self.model_E.lossvalue))
 
         
 class initializer:
@@ -164,7 +169,9 @@ class initializer:
 
     def Samplize(self, sample_num = 1e+5):
 
-        _, _ self.ComputeLogisticCoef
+        _, _  = self.ComputeLogisticCoef()
+
+        f = self.f + 1e-6
 
         p = np.log(f/(1-f))/self.a - self.b/self.a
         p = p/np.sum(p)
@@ -184,7 +191,7 @@ class initializer:
 
         sample = self.Samplize(sample_num = sample_num)
 
-        gmm = GMM(n_components = n_cmop, covariance_type = 'full')
+        gmm = GMM(n_components = n_comp, covariance_type = 'full')
         gmm.fit(sample)
 
         self.params = {}
