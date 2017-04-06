@@ -101,6 +101,7 @@ class Analyzer:
 
         print('initial GMM fitting finished')
 
+        # uGMModel construction
         self.model_G = uGMModel(xy_lim = np.array([self.x_len, self.y_len]),
                                 mixture_size = self.mix,
                                 frame_num = 1,
@@ -108,7 +109,11 @@ class Analyzer:
         self.model_G.params['mus'] = std_params['mus'] - self.OuterDrop
         self.model_G.params['covs'] = std_params['covs']
         self.model_G.params['pi'] = std_params['pi']
+        
+        self.model_G.loss(f = self.f)
+        self.hist_G.append(np.mean(self.model_G.lossvalue))
 
+        # uEpaMixModel costruction
         self.model_E = uEpaMixModel(xy_lim = np.array([self.x_len, self.y_len]),
                                     mixture_size = self.mix,
                                     frame_num = 1,
