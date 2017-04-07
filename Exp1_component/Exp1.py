@@ -11,37 +11,52 @@ import pdb
 
 from sklearn.mixture import GMM
 from tqdm import tqdm
-from multiprocessing import Pool
+from multiprocessing import Pool, Process
 
 from models import uGMModel, uEpaMixModel
 from misc.utils import *
 
-def Exp1(frames, LearningRate, iterate):
+def Exp1(frames, LearningRate, iterate, path):
 
-    frame_num = frame.shape[0]
+    frame_num = frames.shape[0]
 
     core_num = np.int(input('input core number : '))
     pool = Pool(core_num)
 
-    mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,
-                             20, 30, 40, 50])
+    mixture_list = np.array([5, 10])
+    # mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,20, 30, 40, 50, 60, 80, 100])
 
     result = {}
-    
+    hist_E = {}
+
     for mixture in mixture_list:
 
-        result[str(mixture) + 'mixture'] = list(pool.map(analyze,
-                                                         frames,
-                                                         np.ones(frame_num) * LearningRate,
-                                                         np.ones(frame_num) * iterate,
-                                                         np.ones(frame_num) * mixture))
+        feedattrs = [[frame, LearningRate, iterate, mixture] for frame in frames]
+
+        pdb.set_trace()
+
+        ress = list(pool.map(analyze, feedattrs))
+        
         print('{}-th mixture finished'.format(mixture))
 
-    return result
-    
+        result['{}mixture'.format(mixture)] = \
+                            np.array([[res.hist_E[-1], res.hist_G, res.obj_min] \
+                                      for res in ress])
+        hist_E['{}mixture'.format(mixture)] = \
+                            np.array([res.hist_E for res in ress])
+                    
+    with open('{}/obj_result.pkl'.format(path), 'wb') as f:
+        pickle.dump(result, f)
+    with open('{}/hist_E.pkl'.format(path), 'wb') as f:
+        pickle.dump(hist_E, f)
+        
+    return result, hist_E
 
-def analyze(frame, LearningRate, iterate, mixture):
-
+                    
+def analyze(feedattr):
+    # feedattr contains [frame, LearningRate, iterate, mixture]
+    frame, LearningRate, iterate, mixture = feedattr
+                    
     analyzer = Analyzer(frame = frame,
                         LearningRate = LearningRate,
                         iterate = iterate,
@@ -91,6 +106,8 @@ class Analyzer:
         self.hist_G = []
         self.hist_E = []
 
+        self.obj_min = None
+
     def fit(self):
 
         self.modelinit = initializer(frame = self.f_origin)
@@ -100,6 +117,12 @@ class Analyzer:
         self.b = self.modelinit.b
 
         print('initial GMM fitting finished')
+
+        p = np.log(self.f/(1-self.f))/self.a - self.b/self.a
+        z = self.a * p + self.b
+        U_p = 1/self.a * np.log(1 + np.exp(z))
+        self.obj_min = U_p - self.f * p
+        self.obj_min = np.sum(self.obj_min)
 
         # uGMModel construction
         self.model_G = uGMModel(xy_lim = np.array([self.x_len, self.y_len]),
@@ -111,7 +134,7 @@ class Analyzer:
         self.model_G.params['pi'] = std_params['pi']
         
         self.model_G.loss(f = self.f)
-        self.hist_G.append(np.mean(self.model_G.lossvalue))
+        self.hist_G.append(np.sum(self.model_G.lossvalue))
 
         # uEpaMixModel costruction
         self.model_E = uEpaMixModel(xy_lim = np.array([self.x_len, self.y_len]),
@@ -119,7 +142,7 @@ class Analyzer:
                                     frame_num = 1,
                                     logistic_coefficient = np.array([self.a, self.b]))
         self.model_E.params['mus'] = std_params['mus'] - self.OuterDrop
-        self.model_E.params['covs'] = std_params['covs']
+        self.model_E.params['covs'] = std_params['covs'] * 100
         self.model_E.params['pi'] = std_params['pi']
 
         for i in tqdm(range(self.it)):
@@ -138,7 +161,7 @@ class Analyzer:
             self.model_E.params['pi'] = self.model_E.params['pi']\
                                         /np.sum(self.model_E.params['pi'])
             
-            self.hist_E.append(np.mean(self.model_E.lossvalue))
+            self.hist_E.append(np.sum(self.model_E.lossvalue))
 
         
 class initializer:
@@ -162,7 +185,7 @@ class initializer:
 
         self.b = np.log(fmin/(1 - fmin))
 
-        f = self.f + 1e-6
+        f = (1. - 1e-4) * self.f + 1e-4 * 1/2
         self.a = np.sum(np.log(f/(1-f)) - self.b)
 
         return self.a, self.b
@@ -171,7 +194,7 @@ class initializer:
 
         _, _  = self.ComputeLogisticCoef()
 
-        f = self.f + 1e-6
+        f = (1. - 1e-4) * self.f + 1e-4 * 1/2
 
         p = np.log(f/(1-f))/self.a - self.b/self.a
         p = p/np.sum(p)
