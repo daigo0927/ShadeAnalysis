@@ -23,8 +23,8 @@ def Exp1(frames, LearningRate, iterate, path):
     core_num = np.int(input('input core number : '))
     pool = Pool(core_num)
 
-    mixture_list = np.array([5, 10])
-    # mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,20, 30, 40, 50, 60, 80, 100])
+    # mixture_list = np.array([5, 10])
+    mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,20, 30, 40, 50, 60, 80, 100])
 
     result = {}
     hist_E = {}
@@ -32,8 +32,6 @@ def Exp1(frames, LearningRate, iterate, path):
     for mixture in mixture_list:
 
         feedattrs = [[frame, LearningRate, iterate, mixture] for frame in frames]
-
-        pdb.set_trace()
 
         ress = list(pool.map(analyze, feedattrs))
         
