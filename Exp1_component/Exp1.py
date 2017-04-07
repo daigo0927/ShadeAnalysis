@@ -10,6 +10,7 @@ import pickle
 import pdb
 
 from sklearn.mixture import GMM
+# from sklearn.mixture import GaussianMixture as GMM
 from tqdm import tqdm
 from multiprocessing import Pool, Process
 
@@ -38,10 +39,10 @@ def Exp1(frames, LearningRate, iterate, path):
         print('{}-th mixture finished'.format(mixture))
 
         result['{}mixture'.format(mixture)] = \
-                            np.array([[res.hist_E[-1], res.hist_G, res.obj_min] \
+                            np.array([[res.hist_E[-1], res.hist_G[-1], res.obj_min] \
                                       for res in ress])
         hist_E['{}mixture'.format(mixture)] = \
-                            np.array([res.hist_E for res in ress])
+                            np.array([np.array(res.hist_E) for res in ress])
                     
     with open('{}/obj_result.pkl'.format(path), 'wb') as f:
         pickle.dump(result, f)
@@ -195,9 +196,10 @@ class initializer:
         f = (1. - 1e-4) * self.f + 1e-4 * 1/2
 
         p = np.log(f/(1-f))/self.a - self.b/self.a
-        p = p/np.sum(p)
 
         p_vec = p.reshape(p.size)
+        p_vec[p_vec<0] = 0
+        p_vec = p_vec/np.sum(p_vec)
 
         idx_sample = np.random.choice(range(p.size),
                                       np.int(sample_num),
