@@ -25,29 +25,26 @@ def Exp1(frames, LearningRate, iterate, path):
     pool = Pool(core_num)
 
     # mixture_list = np.array([5, 10])
-    mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,20, 30, 40, 50, 60, 80, 100])
-
-    result = {}
-    hist_E = {}
+    mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,20, 30, 40, 50])
 
     for mixture in mixture_list:
 
-        feedattrs = [[frame, LearningRate, iterate, mixture] for frame in frames]
+        feedattrs = [[frame, LearningRate, iterate, mixture] \
+                     for frame in frames]
 
         ress = list(pool.map(analyze, feedattrs))
         
         print('{}-th mixture finished'.format(mixture))
 
-        result['{}mixture'.format(mixture)] = \
-                            np.array([[res.hist_E[-1], res.hist_G[-1], res.obj_min] \
-                                      for res in ress])
-        hist_E['{}mixture'.format(mixture)] = \
-                            np.array([np.array(res.hist_E) for res in ress])
+        result = np.array([[res.hist_E[-1], res.hist_G[-1], res.obj_min]\
+                           for res in ress])
+
+        hist_E = np.array([np.array(res.hist_E) for res in ress])
                     
-    with open('{}/obj_result.pkl'.format(path), 'wb') as f:
-        pickle.dump(result, f)
-    with open('{}/hist_E.pkl'.format(path), 'wb') as f:
-        pickle.dump(hist_E, f)
+        with open('{}/obj_{}mix.pkl'.format(path, mixture), 'wb') as f:
+            pickle.dump(result, f)
+        with open('{}/hist_E_{}mix.pkl'.format(path, mixture), 'wb') as f:
+            pickle.dump(hist_E, f)
         
     return result, hist_E
 
