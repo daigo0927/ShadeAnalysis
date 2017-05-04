@@ -24,8 +24,8 @@ def Exp2(frames, LearningRate, iterate, path):
     core_num = np.int(input('input core number : '))
     pool = Pool(core_num)
 
-    # mixture_list = np.array([5, 10])
-    mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,20, 30, 40, 50])
+    mixture_list = np.array([5, 10, 20])
+    # mixture_list = np.array([5,6,7,8,9,10,11,12,13,14,15,20, 30, 40, 50])
 
     for mixture in mixture_list:
 
@@ -51,6 +51,13 @@ def Exp2(frames, LearningRate, iterate, path):
             pickle.dump(hist_all, f)
         with open('{}/hist_move_{}mix.pkl'.format(path, mixture), 'wb') as f:
             pickle.dump(hist_move, f)
+
+        for i, res in enumerate(ress):
+
+            with open('{}/params_{}mix_{}batch.pkl'.format(path, mixture, i),\
+                      'wb') as f:
+                pickle.dump(res.__dict__, f)
+            
         
     return result, hist_all, hist_move
 
