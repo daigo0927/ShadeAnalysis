@@ -9,8 +9,8 @@ import seaborn as sns
 import pickle
 import pdb
 
-# from sklearn.mixture import GMM
-from sklearn.mixture import GaussianMixture as GMM
+from sklearn.mixture import GMM
+# from sklearn.mixture import GaussianMixture as GMM
 from tqdm import tqdm
 from multiprocessing import Pool, Process
 
@@ -171,6 +171,10 @@ class Analyzer:
             self.model_all.params['pi'] -= self.lr * grad['pi']
             self.model_all.params['mus'] -= self.lr * grad['mus']
             self.model_all.params['covs'] -= self.lr * np.linalg.inv(grad['covs_inv'])
+            for i, cov in enumerate(self.model_all.params['covs']):
+                if not np.all(np.linalg.eigvals(cov) >= 0):
+                    self.model_all.params['covs'][i] = std_params['covs'][0]/10
+            
             self.model_all.params['move'] -= self.lr * grad['move']
 
             # weight normalize
@@ -246,8 +250,8 @@ class initializer:
 
         self.params = {}
         self.params['mus'] = gmm.means_
-        # self.params['covs'] = gmm.covars_
-        self.params['covs'] = gmm.covariances_
+        self.params['covs'] = gmm.covars_
+        # self.params['covs'] = gmm.covariances_
         self.params['pi'] = gmm.weights_
 
         return self.params
