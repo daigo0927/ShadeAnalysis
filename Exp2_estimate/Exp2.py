@@ -32,6 +32,8 @@ def Exp2(frames, LearningRate, iterate, path):
         feedattrs = [[frames[i:i+3], LearningRate, iterate, mixture] \
                      for i in range(len(frames)-2)]
 
+        # pdb.set_trace()
+
         ress = list(pool.map(analyze, feedattrs))
         
         print('{}-th mixture finished'.format(mixture))
@@ -181,8 +183,8 @@ class Analyzer:
 
             # only move gradient computing
             grad_move = self.model_move.gradient_move(f = self.f)
-            grad_move = np.mean(np.sum(grad_move[key], axis = (1,2)), axis = 0)
-            self.model_move.params['move'] = -= self.lr * grad_move
+            grad_move = np.mean(np.sum(grad_move, axis = (1,2)), axis = 0)
+            self.model_move.params['move'] -= self.lr * grad_move
 
             # loss record
             self.hist_move.append(np.sum(self.model_move.lossvalue))
